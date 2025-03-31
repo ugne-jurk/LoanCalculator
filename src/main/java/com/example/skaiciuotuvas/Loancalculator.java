@@ -11,7 +11,9 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
@@ -24,6 +26,7 @@ public class Loancalculator extends Application {
     private TableView<PaymentEntry> paymentTable = new TableView<>();
     private ObservableList<PaymentEntry> paymentData = FXCollections.observableArrayList();
     private FilteredList<PaymentEntry> filteredData;
+    private GraphSection graphSection;
 
     @Override
     public void start(Stage primaryStage) {
@@ -32,16 +35,24 @@ public class Loancalculator extends Application {
         mainLayout.setPadding(new Insets(20));
         mainLayout.setStyle("-fx-background-color: #f5f5f5;");
 
+
+        graphSection = new GraphSection();
+
         // Create sections
         VBox inputSection = createInputSection();
         VBox tableSection = createTableSection();
 
+        // Create a container for the table and graph
+        VBox rightSection = new VBox(15);
+        rightSection.getChildren().addAll(tableSection, graphSection.getChart());
+        VBox.setVgrow(tableSection, Priority.ALWAYS);
+
         // Layout arrangement
         mainLayout.setLeft(inputSection);
-        mainLayout.setCenter(tableSection);
+        mainLayout.setCenter(rightSection);
 
         // Create a scene with inline styles
-        Scene scene = new Scene(mainLayout, 1000, 700);
+        Scene scene = new Scene(mainLayout, 1200, 800);
 
         primaryStage.setTitle("Paskolos Skaičiuoklė");
         primaryStage.setScene(scene);
@@ -50,8 +61,8 @@ public class Loancalculator extends Application {
 
     private VBox createInputSection() {
         // Input section with card-like appearance
-        VBox inputContent = new VBox(20);
-        inputContent.setPadding(new Insets(20));
+        VBox inputContent = new VBox(10);
+        inputContent.setPadding(new Insets(10));
         inputContent.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-radius: 5; -fx-background-radius: 5;");
         inputContent.setMinWidth(350);
 
@@ -91,7 +102,7 @@ public class Loancalculator extends Application {
         // Interest rate field
         Label annualInterestLabel = new Label("Metinė palūkanų norma (%)");
         TextField annualInterestField = new TextField();
-        annualInterestField.setPromptText("Pvz.: 5.5");
+        annualInterestField.setPromptText("Pvz.: 2.5");
         annualInterestField.setStyle("-fx-padding: 8px; -fx-border-color: #ddd; -fx-border-radius: 3px;");
 
         // Payment type selection with better styling
@@ -166,11 +177,17 @@ public class Loancalculator extends Application {
                     double monthlyPayment = amount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -totalMonths));
                     resultField.setText(String.format("%.2f €", monthlyPayment));
                     generateAnnuitySchedule(amount, monthlyRate, totalMonths, monthlyPayment);
+
+                    // Update chart for annuity payments
+                    graphSection.updateChartFromData(paymentData, amount);
                 } else {
                     double principalPayment = amount / totalMonths;
                     double firstMonthPayment = principalPayment + (amount * monthlyRate);
                     resultField.setText(String.format("%.2f € - %.2f €", firstMonthPayment, principalPayment + (principalPayment * monthlyRate)));
                     generateLinearSchedule(amount, monthlyRate, totalMonths, principalPayment);
+
+                    // Update chart for linear payments
+                    graphSection.updateChartFromData(paymentData, amount);
                 }
             } catch (NumberFormatException ex) {
                 showAlert("Klaida", "Neteisingas formatas", "Prašome įvesti tinkamus skaičius.");
@@ -258,6 +275,69 @@ public class Loancalculator extends Application {
         return filterSection;
     }
 
+    public class GraphSection {
+        private LineChart<Number, Number> paymentChart;
+        private XYChart.Series<Number, Number> paymentSeries;
+        private XYChart.Series<Number, Number> principalSeries;
+        private XYChart.Series<Number, Number> interestSeries;
+
+        public GraphSection() {
+            // Create X and Y axes
+            NumberAxis xAxis = new NumberAxis();
+            xAxis.setLabel("Mėnuo");
+
+            NumberAxis yAxis = new NumberAxis();
+            yAxis.setLabel("Mokėjimas (€)");
+
+            // Create the LineChart
+            paymentChart = new LineChart<>(xAxis, yAxis);
+            paymentChart.setTitle("Mokėjimai per laiką");
+            paymentChart.setAnimated(true);
+            paymentChart.setLegendVisible(true); // Display legend to distinguish series
+
+            // Initialize data series
+            paymentSeries = new XYChart.Series<>();
+            paymentSeries.setName("Bendra įmoka");
+
+            principalSeries = new XYChart.Series<>();
+            principalSeries.setName("Pagrindinė suma");
+
+            interestSeries = new XYChart.Series<>();
+            interestSeries.setName("Palūkanos");
+
+            // Add the series to the chart
+            paymentChart.getData().addAll(paymentSeries, principalSeries, interestSeries);
+            paymentChart.setPrefHeight(300); // Adjust size
+
+            // Apply custom styling
+            paymentChart.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-radius: 5;");
+        }
+
+        // Method to update chart with payment data from payment entries
+        public void updateChartFromData(ObservableList<PaymentEntry> paymentData, double initialAmount) {
+            paymentSeries.getData().clear(); // Clear old data
+            principalSeries.getData().clear();
+            interestSeries.getData().clear();
+
+            // Add data points from payment entries
+            for (PaymentEntry entry : paymentData) {
+                int month = entry.getMonth();
+                double payment = Double.parseDouble(entry.getPayment().replace(",", "."));
+                double principal = Double.parseDouble(entry.getPrincipal().replace(",", "."));
+                double interest = Double.parseDouble(entry.getInterest().replace(",", "."));
+
+                paymentSeries.getData().add(new XYChart.Data<>(month, payment));
+                principalSeries.getData().add(new XYChart.Data<>(month, principal));
+                interestSeries.getData().add(new XYChart.Data<>(month, interest));
+            }
+        }
+
+        // Get the chart to add it to the main UI
+        public LineChart<Number, Number> getChart() {
+            return paymentChart;
+        }
+    }
+
     private VBox createTableSection() {
         VBox tableContainer = new VBox(15);
         tableContainer.setPadding(new Insets(0, 0, 0, 20));
@@ -286,7 +366,8 @@ public class Loancalculator extends Application {
         ScrollPane scrollPane = new ScrollPane(paymentTable);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
-        scrollPane.setPrefViewportHeight(500);
+        scrollPane.setPrefViewportHeight(400);
+        scrollPane.setStyle("-fx-background: white; -fx-border-color: #ddd;");
 
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
@@ -324,7 +405,7 @@ public class Loancalculator extends Application {
         TableColumn<PaymentEntry, Integer> monthCol = new TableColumn<>("Mėnuo");
         monthCol.setCellValueFactory(new PropertyValueFactory<>("month"));
         monthCol.setStyle("-fx-alignment: CENTER;");
-        monthCol.setPrefWidth(80);
+        //monthCol.setPrefWidth(10);
 
         TableColumn<PaymentEntry, String> paymentCol = new TableColumn<>("Mokėjimas (€)");
         paymentCol.setCellValueFactory(new PropertyValueFactory<>("payment"));
