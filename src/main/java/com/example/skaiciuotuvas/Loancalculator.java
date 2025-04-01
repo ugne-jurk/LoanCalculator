@@ -27,6 +27,7 @@ public class Loancalculator extends Application {
     private ObservableList<PaymentEntry> paymentData = FXCollections.observableArrayList();
     private FilteredList<PaymentEntry> filteredData;
     private GraphSection graphSection;
+    private LocalDate loanStartDate = LocalDate.now();
 
     @Override
     public void start(Stage primaryStage) {
@@ -34,7 +35,6 @@ public class Loancalculator extends Application {
         BorderPane mainLayout = new BorderPane();
         mainLayout.setPadding(new Insets(20));
         mainLayout.setStyle("-fx-background-color: #f5f5f5;");
-
 
         graphSection = new GraphSection();
 
@@ -118,6 +118,9 @@ public class Loancalculator extends Application {
         VBox paymentTypeBox = new VBox(10);
         paymentTypeBox.getChildren().addAll(annuity, linear);
 
+        // Deferment section
+        VBox defermentSection = createDefermentSection();
+
         // Create a styled button with hover effect
         Button calculateButton = new Button("Skaičiuoti");
         calculateButton.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10px 15px; -fx-cursor: hand; -fx-border-radius: 4px;");
@@ -141,6 +144,7 @@ public class Loancalculator extends Application {
                 loanTermLabel, termBox,
                 annualInterestLabel, annualInterestField,
                 paymentTypeLabel, paymentTypeBox,
+                defermentSection,
                 calculateButton,
                 separator,
                 resultLabel, resultField,
@@ -198,6 +202,67 @@ public class Loancalculator extends Application {
         return inputContent;
     }
 
+    private VBox createDefermentSection() {
+        VBox defermentSection = new VBox(10);
+        defermentSection.setPadding(new Insets(10));
+        defermentSection.setStyle("-fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-radius: 5;");
+
+        Label defermentTitle = new Label("Atidėjimo nustatymai");
+        defermentTitle.setFont(Font.font("System", FontWeight.BOLD, 14));
+
+        // Start date picker
+        Label startDateLabel = new Label("Paskolos pradžios data:");
+        DatePicker startDatePicker = new DatePicker(LocalDate.now());
+        startDatePicker.setPrefWidth(200);
+
+        // Deferment controls
+        CheckBox defermentCheck = new CheckBox("Taikyti mokėjimų atidėjimą");
+        defermentCheck.setSelected(false);
+
+        GridPane defermentGrid = new GridPane();
+        defermentGrid.setHgap(10);
+        defermentGrid.setVgap(10);
+        defermentGrid.setDisable(true);
+
+        Label deferStartLabel = new Label("Atidėjimo pradžia:");
+        DatePicker deferStartPicker = new DatePicker(LocalDate.now().plusMonths(1));
+        deferStartPicker.setPrefWidth(200);
+
+        Label deferDurationLabel = new Label("Atidėjimo trukmė (mėn.):");
+        TextField deferDurationField = new TextField("1");
+        deferDurationField.setPrefWidth(50);
+
+        Label deferRateLabel = new Label("Atidėjimo palūkanos (%):");
+        TextField deferRateField = new TextField("0");
+        deferRateField.setPrefWidth(50);
+
+        defermentGrid.add(deferStartLabel, 0, 0);
+        defermentGrid.add(deferStartPicker, 1, 0);
+        defermentGrid.add(deferDurationLabel, 0, 1);
+        defermentGrid.add(deferDurationField, 1, 1);
+        defermentGrid.add(deferRateLabel, 0, 2);
+        defermentGrid.add(deferRateField, 1, 2);
+
+        // Enable/disable deferment controls based on checkbox
+        defermentCheck.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            defermentGrid.setDisable(!newVal);
+        });
+
+        // Update loan start date when changed
+        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            loanStartDate = newVal;
+        });
+
+        defermentSection.getChildren().addAll(
+                defermentTitle,
+                startDateLabel, startDatePicker,
+                defermentCheck,
+                defermentGrid
+        );
+
+        return defermentSection;
+    }
+
     private VBox createDateFilterSection() {
         // Create date filter section with clear styling
         VBox filterSection = new VBox(15);
@@ -251,7 +316,7 @@ public class Loancalculator extends Application {
                 }
 
                 // Apskaičiuojame mokėjimo datą
-                LocalDate paymentDate = calculatePaymentDate(LocalDate.now(), payment.getMonth());
+                LocalDate paymentDate = calculatePaymentDate(loanStartDate, payment.getMonth());
 
                 // Taikome filtravimo sąlygas
                 boolean afterStart = startDate == null || paymentDate.compareTo(startDate) >= 0;
@@ -340,14 +405,14 @@ public class Loancalculator extends Application {
 
     private VBox createTableSection() {
         VBox tableContainer = new VBox(15);
-        tableContainer.setPadding(new Insets(0, 0, 0, 20));
+        tableContainer.setPadding(new Insets(0, 0, 0, 10));
 
         // Payment table title
         Label tableTitle = new Label("Paskolos grąžinimo grafikas");
         tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
 
         // Summary pane for showing totals
-        HBox summaryBox = new HBox(20);
+        HBox summaryBox = new HBox(10);
         summaryBox.setPadding(new Insets(10));
         summaryBox.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-radius: 5; -fx-background-radius: 5;");
         summaryBox.setAlignment(Pos.CENTER_LEFT);
@@ -395,7 +460,6 @@ public class Loancalculator extends Application {
         return tableContainer;
     }
 
-    // Mokėjimų lentelės nustatymo metodas
     private void setupPaymentTable() {
         paymentTable.setItems(paymentData);
         paymentTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -405,7 +469,6 @@ public class Loancalculator extends Application {
         TableColumn<PaymentEntry, Integer> monthCol = new TableColumn<>("Mėnuo");
         monthCol.setCellValueFactory(new PropertyValueFactory<>("month"));
         monthCol.setStyle("-fx-alignment: CENTER;");
-        //monthCol.setPrefWidth(10);
 
         TableColumn<PaymentEntry, String> paymentCol = new TableColumn<>("Mokėjimas (€)");
         paymentCol.setCellValueFactory(new PropertyValueFactory<>("payment"));
@@ -441,7 +504,6 @@ public class Loancalculator extends Application {
         });
     }
 
-    // Alert helper method
     private void showAlert(String title, String header, String content) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setTitle(title);
@@ -450,7 +512,6 @@ public class Loancalculator extends Application {
         alert.showAndWait();
     }
 
-    // Mokėjimo datos apskaičiavimo metodas
     private LocalDate calculatePaymentDate(LocalDate startDate, int monthNumber) {
         if (startDate == null) {
             return LocalDate.now().plusMonths(monthNumber - 1);
@@ -458,7 +519,6 @@ public class Loancalculator extends Application {
         return startDate.plusMonths(monthNumber - 1);
     }
 
-    // Anuiteto grafiko generavimo metodas
     private void generateAnnuitySchedule(double amount, double monthlyRate, int totalMonths, double monthlyPayment) {
         double balance = amount;
         DecimalFormat df = new DecimalFormat("#.00");
@@ -478,7 +538,6 @@ public class Loancalculator extends Application {
         }
     }
 
-    // Linijinio grafiko generavimo metodas
     private void generateLinearSchedule(double amount, double monthlyRate, int totalMonths, double principalPayment) {
         double balance = amount;
         DecimalFormat df = new DecimalFormat("#.00");
@@ -509,7 +568,6 @@ public class Loancalculator extends Application {
         launch(args);
     }
 
-    // Mokėjimo įrašo klasė
     public static class PaymentEntry {
         private final int month;
         private final String payment;
