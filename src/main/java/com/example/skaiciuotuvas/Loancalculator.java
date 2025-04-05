@@ -17,9 +17,9 @@ import javafx.scene.chart.XYChart;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-
 import java.text.DecimalFormat;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 public class Loancalculator extends Application {
 
@@ -28,6 +28,10 @@ public class Loancalculator extends Application {
     private FilteredList<PaymentEntry> filteredData;
     private GraphSection graphSection;
     private LocalDate loanStartDate = LocalDate.now();
+
+    private TextField deferDurationField = new TextField("0");
+    private TextField deferRateField = new TextField("0");
+    private LocalDate defermentStartDate = LocalDate.now().plusMonths(1);
 
     @Override
     public void start(Stage primaryStage) {
@@ -44,12 +48,13 @@ public class Loancalculator extends Application {
 
         // Create a container for the table and graph
         VBox rightSection = new VBox(15);
-        rightSection.getChildren().addAll(tableSection, graphSection.getChart());
+        rightSection.getChildren().addAll( graphSection.getChart(),tableSection);
         VBox.setVgrow(tableSection, Priority.ALWAYS);
 
         // Layout arrangement
         mainLayout.setLeft(inputSection);
         mainLayout.setCenter(rightSection);
+
 
         // Create a scene with inline styles
         Scene scene = new Scene(mainLayout, 1200, 800);
@@ -119,7 +124,7 @@ public class Loancalculator extends Application {
         paymentTypeBox.getChildren().addAll(annuity, linear);
 
         // Deferment section
-        VBox defermentSection = createDefermentSection();
+        TitledPane defermentSection = createDefermentSection();
 
         // Create a styled button with hover effect
         Button calculateButton = new Button("Skaičiuoti");
@@ -174,6 +179,14 @@ public class Loancalculator extends Application {
                     showAlert("Klaida", "Neteisingos reikšmės", "Įsitikinkite, kad suma, procentai ir terminas yra teigiami skaičiai.");
                     return;
                 }
+                int deferDuration = Integer.parseInt(deferDurationField.getText());
+                double deferRate = Double.parseDouble(deferRateField.getText().replace(",", "."));
+
+                // Adjust total months if deferment is active
+                if (deferDuration > 0) {
+                    totalMonths += deferDuration;
+                }
+
 
                 paymentData.clear();
 
@@ -181,60 +194,48 @@ public class Loancalculator extends Application {
                     double monthlyPayment = amount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -totalMonths));
                     resultField.setText(String.format("%.2f €", monthlyPayment));
                     generateAnnuitySchedule(amount, monthlyRate, totalMonths, monthlyPayment);
-
-                    // Update chart for annuity payments
                     graphSection.updateChartFromData(paymentData, amount);
                 } else {
                     double principalPayment = amount / totalMonths;
                     double firstMonthPayment = principalPayment + (amount * monthlyRate);
                     resultField.setText(String.format("%.2f € - %.2f €", firstMonthPayment, principalPayment + (principalPayment * monthlyRate)));
                     generateLinearSchedule(amount, monthlyRate, totalMonths, principalPayment);
-
-                    // Update chart for linear payments
                     graphSection.updateChartFromData(paymentData, amount);
                 }
             } catch (NumberFormatException ex) {
                 showAlert("Klaida", "Neteisingas formatas", "Prašome įvesti tinkamus skaičius.");
                 paymentData.clear();
             }
+
         });
 
         return inputContent;
     }
 
-    private VBox createDefermentSection() {
-        VBox defermentSection = new VBox(10);
-        defermentSection.setPadding(new Insets(10));
-        defermentSection.setStyle("-fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-radius: 5;");
-
-        Label defermentTitle = new Label("Atidėjimo nustatymai");
-        defermentTitle.setFont(Font.font("System", FontWeight.BOLD, 14));
-
-        // Start date picker
-        Label startDateLabel = new Label("Paskolos pradžios data:");
-        DatePicker startDatePicker = new DatePicker(LocalDate.now());
-        startDatePicker.setPrefWidth(200);
+    private TitledPane createDefermentSection() {
+        // Create the content first
+        VBox defermentContent = new VBox(10);
+        defermentContent.setPadding(new Insets(10));
+        defermentContent.setStyle("-fx-background-color: #f8f8f8; -fx-border-color: #ddd; -fx-border-radius: 5;");
 
         // Deferment controls
-        CheckBox defermentCheck = new CheckBox("Taikyti mokėjimų atidėjimą");
-        defermentCheck.setSelected(false);
-
         GridPane defermentGrid = new GridPane();
         defermentGrid.setHgap(10);
         defermentGrid.setVgap(10);
-        defermentGrid.setDisable(true);
 
         Label deferStartLabel = new Label("Atidėjimo pradžia:");
         DatePicker deferStartPicker = new DatePicker(LocalDate.now().plusMonths(1));
+        deferStartPicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            defermentStartDate = newVal;
+        });
+
         deferStartPicker.setPrefWidth(200);
 
         Label deferDurationLabel = new Label("Atidėjimo trukmė (mėn.):");
-        TextField deferDurationField = new TextField("1");
-        deferDurationField.setPrefWidth(50);
+        deferDurationField.setPrefWidth(50);  // Use the already initialized field
 
         Label deferRateLabel = new Label("Atidėjimo palūkanos (%):");
-        TextField deferRateField = new TextField("0");
-        deferRateField.setPrefWidth(50);
+        deferRateField.setPrefWidth(50);  // Use the already initialized field
 
         defermentGrid.add(deferStartLabel, 0, 0);
         defermentGrid.add(deferStartPicker, 1, 0);
@@ -243,25 +244,20 @@ public class Loancalculator extends Application {
         defermentGrid.add(deferRateLabel, 0, 2);
         defermentGrid.add(deferRateField, 1, 2);
 
-        // Enable/disable deferment controls based on checkbox
-        defermentCheck.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            defermentGrid.setDisable(!newVal);
-        });
 
-        // Update loan start date when changed
-        startDatePicker.valueProperty().addListener((obs, oldVal, newVal) -> {
-            loanStartDate = newVal;
-        });
+        // Add components to content
+        defermentContent.getChildren().addAll(defermentGrid);
 
-        defermentSection.getChildren().addAll(
-                defermentTitle,
-                startDateLabel, startDatePicker,
-                defermentCheck,
-                defermentGrid
-        );
+        // Create the TitledPane
+        TitledPane defermentPane = new TitledPane("Atidėjimo nustatymai", defermentContent);
+        defermentPane.setAnimated(true);
+        defermentPane.setExpanded(false);
+        defermentPane.setStyle("-fx-background-color: #f8f8f8; -fx-border-color: #ddd;");
 
-        return defermentSection;
+        return defermentPane;
     }
+
+
 
     private VBox createDateFilterSection() {
         // Create date filter section with clear styling
@@ -404,58 +400,39 @@ public class Loancalculator extends Application {
     }
 
     private VBox createTableSection() {
-        VBox tableContainer = new VBox(15);
-        tableContainer.setPadding(new Insets(0, 0, 0, 10));
+        VBox tableContainer = new VBox(5); // Reduced spacing from 15 to 5
+        tableContainer.setPadding(new Insets(0, 0, 0, 20));
 
         // Payment table title
         Label tableTitle = new Label("Paskolos grąžinimo grafikas");
-        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
+        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 16)); // Smaller font size
 
-        // Summary pane for showing totals
-        HBox summaryBox = new HBox(10);
-        summaryBox.setPadding(new Insets(10));
+        // Summary pane - make it more compact
+        HBox summaryBox = new HBox(10); // Reduced spacing from 20 to 10
+        summaryBox.setPadding(new Insets(5)); // Reduced padding from 10 to 5
         summaryBox.setStyle("-fx-background-color: white; -fx-border-color: #ddd; -fx-border-radius: 5; -fx-background-radius: 5;");
         summaryBox.setAlignment(Pos.CENTER_LEFT);
 
         Label totalPaymentLabel = new Label("Bendra suma: 0.00 €");
         Label totalInterestLabel = new Label("Palūkanos: 0.00 €");
-
         summaryBox.getChildren().addAll(totalPaymentLabel, totalInterestLabel);
 
-        // Setup the payment table with improved styling
+        // Setup the payment table
         setupPaymentTable();
-        paymentTable.setStyle("-fx-font-size: 14px;");
-        paymentTable.setPlaceholder(new Label("Nėra duomenų. Užpildykite paskolos duomenis ir spauskite \"Skaičiuoti\"."));
+        paymentTable.setStyle("-fx-font-size: 12px;"); // Smaller font size
 
-        // Wrap the table in a scroll pane for better visibility
+
+        paymentTable.setFixedCellSize(25);
+        paymentTable.setPrefHeight(10 * 25 + 30); // 5 rows + header
+
+        // ScrollPane adjustments
         ScrollPane scrollPane = new ScrollPane(paymentTable);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
-        scrollPane.setPrefViewportHeight(400);
+        scrollPane.setPrefHeight(paymentTable.getPrefHeight() + 2); // Slightly larger than table
         scrollPane.setStyle("-fx-background: white; -fx-border-color: #ddd;");
 
-        VBox.setVgrow(scrollPane, Priority.ALWAYS);
-
         tableContainer.getChildren().addAll(tableTitle, summaryBox, scrollPane);
-
-        // Update summary labels when payment data changes
-        paymentData.addListener((javafx.collections.ListChangeListener.Change<? extends PaymentEntry> c) -> {
-            if (!paymentData.isEmpty()) {
-                double totalPayment = 0;
-                double totalInterest = 0;
-
-                for (PaymentEntry entry : paymentData) {
-                    totalPayment += Double.parseDouble(entry.getPayment().replace(",", "."));
-                    totalInterest += Double.parseDouble(entry.getInterest().replace(",", "."));
-                }
-
-                totalPaymentLabel.setText(String.format("Bendra suma: %.2f €", totalPayment));
-                totalInterestLabel.setText(String.format("Palūkanos: %.2f €", totalInterest));
-            } else {
-                totalPaymentLabel.setText("Bendra suma: 0.00 €");
-                totalInterestLabel.setText("Palūkanos: 0.00 €");
-            }
-        });
 
         return tableContainer;
     }
@@ -464,6 +441,8 @@ public class Loancalculator extends Application {
         paymentTable.setItems(paymentData);
         paymentTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         paymentTable.setStyle("-fx-border-color: #ddd;");
+        paymentTable.setMaxHeight(Region.USE_PREF_SIZE);
+        paymentTable.setMinHeight(Region.USE_PREF_SIZE);
 
         // Add column for payment date
         TableColumn<PaymentEntry, Integer> monthCol = new TableColumn<>("Mėnuo");
@@ -518,23 +497,60 @@ public class Loancalculator extends Application {
         }
         return startDate.plusMonths(monthNumber - 1);
     }
-
     private void generateAnnuitySchedule(double amount, double monthlyRate, int totalMonths, double monthlyPayment) {
         double balance = amount;
         DecimalFormat df = new DecimalFormat("#.00");
 
-        for (int month = 1; month <= totalMonths; month++) {
-            double interest = balance * monthlyRate;
-            double principal = monthlyPayment - interest;
-            balance -= principal;
+        int deferDuration = 0;
+        double deferRate = 0;
+        try {
+            deferDuration = Integer.parseInt(deferDurationField.getText());
+            deferRate = Double.parseDouble(deferRateField.getText()) / 100 / 12;
+        } catch (NumberFormatException e) {
+            // Use defaults if parsing fails
+        }
 
-            paymentData.add(new PaymentEntry(
-                    month,
-                    df.format(monthlyPayment),
-                    df.format(principal),
-                    df.format(interest),
-                    df.format(Math.max(0, balance))
-            ));
+        // Calculate when deferment should start based on selected date
+        int deferStartMonth = 1;
+        if (deferDuration > 0 && defermentStartDate != null) {
+            deferStartMonth = (int) loanStartDate.until(defermentStartDate, ChronoUnit.MONTHS) + 1;
+            if (deferStartMonth < 1) deferStartMonth = 1;
+        }
+
+        for (int month = 1; month <= totalMonths; month++) {
+            double interest, principal;
+
+            if (deferDuration > 0 && month >= deferStartMonth && month < deferStartMonth + deferDuration) {
+                // Deferment period logic
+                interest = balance * deferRate;
+                principal = 0;
+                paymentData.add(new PaymentEntry(
+                        month,
+                        df.format(0.00),
+                        df.format(principal),
+                        df.format(interest),
+                        df.format(balance)
+                ));
+                balance += interest;
+            } else {
+                // Regular payment logic
+                if (month == deferStartMonth + deferDuration) {
+                    int remainingMonths = totalMonths - (deferStartMonth + deferDuration - 1);
+                    monthlyPayment = balance * monthlyRate / (1 - Math.pow(1 + monthlyRate, -remainingMonths));
+                }
+
+                interest = balance * monthlyRate;
+                principal = monthlyPayment - interest;
+                balance -= principal;
+
+                paymentData.add(new PaymentEntry(
+                        month,
+                        df.format(monthlyPayment),
+                        df.format(principal),
+                        df.format(interest),
+                        df.format(Math.max(0, balance))
+                ));
+            }
         }
     }
 
@@ -542,25 +558,75 @@ public class Loancalculator extends Application {
         double balance = amount;
         DecimalFormat df = new DecimalFormat("#.00");
 
+        // Safely get deferment values with defaults
+        int deferDuration = 0;
+        double deferRate = 0;
+        try {
+            deferDuration = Integer.parseInt(deferDurationField.getText());
+            deferRate = Double.parseDouble(deferRateField.getText()) / 100 / 12;
+        } catch (NumberFormatException e) {
+            // Use defaults if parsing fails
+        }
+
+        // Calculate when deferment should start based on selected date
+        int deferStartMonth = 1;
+        if (deferDuration > 0 && defermentStartDate != null) {
+            deferStartMonth = (int) loanStartDate.until(defermentStartDate, ChronoUnit.MONTHS) + 1;
+            if (deferStartMonth < 1) deferStartMonth = 1;
+        }
+
+        boolean defermentActive = deferDuration > 0;
+        int paymentStartMonth = defermentActive ? deferStartMonth + deferDuration : 1;
+        int actualPaymentMonths = totalMonths - (defermentActive ? deferDuration : 0);
+
         for (int month = 1; month <= totalMonths; month++) {
-            double interest = balance * monthlyRate;
-            double payment = principalPayment + interest;
-            balance -= principalPayment;
+            double interest, payment;
+            double currentPrincipal = 0;
 
-            if (month == totalMonths) {
-                // Koregavimas dėl apvalinimo paklaidų paskutinį mėnesį
-                principalPayment += balance;
-                payment += balance;
-                balance = 0;
+            if (defermentActive && month >= deferStartMonth && month < deferStartMonth + deferDuration) {
+                // Deferment period - only interest accrues
+                interest = balance * deferRate;
+                payment = 0;
+                currentPrincipal = 0;
+
+                paymentData.add(new PaymentEntry(
+                        month,
+                        df.format(payment),
+                        df.format(currentPrincipal),
+                        df.format(interest),
+                        df.format(balance)
+                ));
+
+                // Add interest to principal during deferment
+                balance += interest;
+            } else {
+                // Regular payment period
+                interest = balance * monthlyRate;
+
+                // For the first payment after deferment, recalculate principal
+                if (month == paymentStartMonth) {
+                    principalPayment = balance / (totalMonths - month + 1);
+                }
+
+                currentPrincipal = principalPayment;
+                payment = currentPrincipal + interest;
+                balance -= currentPrincipal;
+
+                // Final payment adjustment
+                if (month == totalMonths) {
+                    currentPrincipal += balance;
+                    payment += balance;
+                    balance = 0;
+                }
+
+                paymentData.add(new PaymentEntry(
+                        month,
+                        df.format(payment),
+                        df.format(currentPrincipal),
+                        df.format(interest),
+                        df.format(Math.max(0, balance))
+                ));
             }
-
-            paymentData.add(new PaymentEntry(
-                    month,
-                    df.format(payment),
-                    df.format(principalPayment),
-                    df.format(interest),
-                    df.format(Math.max(0, balance))
-            ));
         }
     }
 
