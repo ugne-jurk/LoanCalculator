@@ -6,7 +6,6 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -17,6 +16,13 @@ import javafx.stage.Stage;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+
+import com.itextpdf.text.DocumentException;
+import javafx.stage.FileChooser;
+import java.io.File;
+import java.io.IOException;
+import javafx.geometry.Pos;
+
 
 public class Loancalculator extends Application {
 
@@ -301,8 +307,35 @@ public class Loancalculator extends Application {
 
         Label tableTitle = new Label("Paskolos grąžinimo grafikas");
         tableTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
+        Button exportButton = new Button("Eksportuoti į PDF");
+        exportButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 8px 15px; -fx-cursor: hand; -fx-border-radius: 4px;");
+        exportButton.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Išsaugoti PDF");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF Files", "*.pdf"));
+            File file = fileChooser.showSaveDialog(null);
 
-        HBox summaryBox = new HBox(10);
+            if (file != null) {
+                try {
+                    PdfExporter.exportToPdf(paymentTable, file);
+
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Eksportavimas sėkmingas");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Paskolos grafikas sėkmingai išsaugotas kaip PDF.");
+                    alert.showAndWait();
+                } catch (IOException | DocumentException ex) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setTitle("Klaida");
+                    alert.setHeaderText("Nepavyko išsaugoti PDF");
+                    alert.setContentText("Įvyko klaida bandant išsaugoti PDF failą:\n" + ex.getMessage());
+                    alert.showAndWait();
+                }
+            }
+        });
+        HBox buttonBox = new HBox(10, exportButton);
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+
 
         setupPaymentTable();
         paymentTable.setStyle("-fx-font-size: 12px;");
@@ -315,7 +348,7 @@ public class Loancalculator extends Application {
         scrollPane.setPrefHeight(paymentTable.getPrefHeight() + 2);
         scrollPane.setStyle("-fx-background: white; -fx-border-color: #ddd;");
 
-        tableContainer.getChildren().addAll(tableTitle, summaryBox, scrollPane);
+        tableContainer.getChildren().addAll(tableTitle, buttonBox, scrollPane);
 
         return tableContainer;
     }
